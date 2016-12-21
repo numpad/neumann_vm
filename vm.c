@@ -1,94 +1,128 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include "vm.h"
 
-/* Data types */
-typedef unsigned char vm_byte;
-typedef unsigned short vm_word;
+/* Prints usage information */
+void usage(char *arg0) {
+	puts  ("vm - a simple von neumann virtual machine");
+	puts  ("usage:");
+	printf(" %s -h, help\n", arg0);
+	printf(" %s -c, assemble <in> [out]\n", arg0);
+	printf(" %s -r, run <in>\n", arg0);
+}
 
-/* Von Neumann Opcodes */
-enum {
-	/* data transfer */
-	NOP  = 0x10, LDM  = 0x11,
-	LDI  = 0x12, LDA  = 0x18,
-	STI  = 0x21, STM  = 0x28,
-	/* arithmetic, logic and shift */
-	ADD  = 0x30, SUB  = 0x31,
-	MUL  = 0x32, DIV  = 0x33,
-	AND  = 0x34, OR   = 0x35,
-	NOT  = 0x36, XOR  = 0x37,
-	INC  = 0x38, DEC  = 0x39,
-	LEFT = 0x3c, RIGT = 0x3d,
-	/* flow control */
-	JM   = 0x41, JA   = 0x48,
-	JZM  = 0x51, JNM  = 0x52,
-	JLM  = 0x53, JZA  = 0x58,
-	JNA  = 0x59, JLA  = 0x5a,
-	/* io */
-	IN   = 0x61, OUT  = 0x71
-} vm_opcode;
+#define IS_OP(a) (!strcmp(opname, a))
+vm_word vm_parseop(const char *opname) {
+	if      (IS_OP("NOP"))	return NOP;
+	else if (IS_OP("LDM"))	return LDM;
+	else if (IS_OP("LDI"))	return LDI;
+	else if (IS_OP("LDA"))	return LDA;
+	else if (IS_OP("STI"))	return STI;
+	else if (IS_OP("STM"))	return STM;
+	else if (IS_OP("ADD"))	return ADD;
+	else if (IS_OP("SUB"))	return SUB;
+	else if (IS_OP("MUL"))	return MUL;
+	else if (IS_OP("DIV"))	return DIV;
+	else if (IS_OP("AND"))	return AND;
+	else if (IS_OP("OR"))	return OR;
+	else if (IS_OP("NOT"))	return NOT;
+	else if (IS_OP("XOR"))	return XOR;
+	else if (IS_OP("INC"))	return INC;
+	else if (IS_OP("DEC"))	return DEC;
+	else if (IS_OP("LEFT"))	return LEFT;
+	else if (IS_OP("RIGT"))	return RIGT;
+	else if (IS_OP("JM"))	return JM;
+	else if (IS_OP("JA"))	return JA;
+	else if (IS_OP("JZM"))	return JZM;
+	else if (IS_OP("JNM"))	return JNM;
+	else if (IS_OP("JLM"))	return JLM;
+	else if (IS_OP("JZA"))	return JZA;
+	else if (IS_OP("JNA"))	return JNA;
+	else if (IS_OP("JLA"))	return JLA;
+	else if (IS_OP("IN"))	return IN;
+	else if (IS_OP("OUT"))	return OUT;
+	return 0;
+}
+#undef STREQ
 
-/* Structure */
-typedef struct {
-	vm_word *memory;
-	vm_word accu;
-	size_t pc;
-} vm_t;
-
-vm_t vm_new() {
-	vm_t vm;
+/* Assemble a file to bytecode */
+vm_word *vm_assemble(const char *infn, const char *outfn) {
+	FILE *fp = fopen(infn, "r+");
+	FILE *fpout;
+	if (outfn != NULL) {
+		fpout = fopen(outfn, "w+");
+	}
 	
-	/* Initialize a new virtual machine */
-	vm.memory = calloc(0xFF, sizeof(vm_word));
-	vm.accu = 0;
-	vm.pc = 0;
-
-	return vm;
-}
-
-/* Frees resources reserved by the vm */
-void vm_delete(vm_t *vm) {
-	free(vm->memory);
-}
-
-/* Fetches data from memory and increases pc by 1 */
-short vm_fetch(vm_t *vm) {
-	return vm->memory[vm->pc];
-}
-
-/* Splits instruction into op and param */
-void vm_decode(vm_word instruction, vm_byte *op, vm_byte *param) {
-	*op = (instruction & 0xFF00) >> 8;
-	*param = instruction & 0x00FF;
-}
-
-void vm_execute(vm_t *vm, vm_byte op, vm_byte param) {
+	if (!fp) {
+		printf("Could not find \"%s\"\n", infn);
+		return NULL;
+	}	
+	if (outfn != NULL && !fpout) {
+		fclose(fp);
+		printf("Coult not open \"%s\"\n", outfn);
+		return NULL;
+	}
 	
-	switch (op) {
-		case NOP: /* no operation */
-			break;
-		case LDM: /* accu = [param] */
-			vm->accu = vm->memory[param];
-			break;
-		case LDI: /**/
-			
-			break:
-	};
+	vm_word *program = calloc(0xFF, sizeof(vm_word));
+	unsigned char location, param;
+	char op[8];
+	while (fscanf(fp, "%hhX:%s %hhX\n", &location, op, &param) != EOF) {
+		program[location] = (vm_parseop(op) << 8) + param;
+	}
+	
+	if (outfn != NULL) {
+		fwrite(program, sizeof(vm_word), 0xFF, fpout);
+		fclose(fpout);
+		fclose(fp);
+		return NULL;
+	}
+
+	fclose(fp);
+	return program;
 }
 
-#define MEM(addr) printf("[%d]: 0x%X\n", addr, vm.memory[addr])
+/* Loads a binary file to memory */
+void vm_loadmemory(vm_t *vm, const char *fnbin) {
+	FILE *fp = fopen(fnbin, "r+");
+	if (!fp) {
+		printf("Could not open \"%s\"\n", fnbin);
+		return;
+	}
+	
+	fread(vm->memory, sizeof(vm_word), 0xFF, fp);
+
+	fclose(fp);
+}
+
+#define VM_INSTRUCTION(op,param) (((op) << 8) + (param))
 int main(int argc, char *argv[]) {
 	
 	vm_t vm = vm_new();
-
-	/* Programm */
-	vm.memory[0] = 0x1805;
-	vm.memory[1] = 0x30A0;
-	vm.memory[2] = 0x28A0;
-	/* Speicher */
-	vm.memory[0xA0] = 20;
 	
-	MEM(0xa0);
+	if (argc > 1) {
+		if (!strcmp(argv[1], "-h") || !strcmp(argv[1], "help")) {
+			usage(argv[0]);
+			return 0;
+		} else if (!strcmp(argv[1], "-c") || !strcmp(argv[1], "assemble")) {
+			if (argc > 2) {
+				vm_assemble(argv[2], (argc > 3 ? argv[3] : argv[2]));
+				return 0;
+			}
+		} else if (!strcmp(argv[1], "-r") || !strcmp(argv[1], "run")) {
+			if (argc > 2) {
+				vm_loadmemory(&vm, argv[2]);
+			}
+		} else {
+			free(vm.memory);
+			vm.memory = vm_assemble(argv[1], NULL);
+		}
+	} else {
+		usage(argv[0]);
+		return 0;
+	}
 
+	
 	/* Programm ausführen */
 	while (vm.pc < 0xFF) {
 		vm_word instruction = vm_fetch(&vm);
@@ -96,12 +130,7 @@ int main(int argc, char *argv[]) {
 		vm_decode(instruction, &op, &param);
 
 		vm_execute(&vm, op, param);
-
-		if (vm.pc >= 3) break;
-		vm.pc++;
 	}
 
-	MEM(0xa0);
-	
 	return 0;
 }
